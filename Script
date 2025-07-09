@@ -1,0 +1,386 @@
+**Whole Exome Sequencing complete pipeline steps**
+
+# Installation of SRA tool kit
+
+```bash
+wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-
+alma_linux64.tar.gz
+
+tar -xzvf sratoolkit.current-alma_linux64.tar.gz
+```
+
+# Download data from SRA
+
+#Go to link: https://www.ncbi.nlm.nih.gov/sra
+#Search for: congenital heart defect
+#Select filters: DNA, paired, illumia and exome
+#Link: https://www.ncbi.nlm.nih.gov/sra/SRX5665959[accn: SRR8879056
+
+```bash
+/path-to/Software/sratoolkit.3.2.1-alma_linux64/bin/prefetch SRR8879056 -O /path-
+to/Pipeline/WES/SRR8879056
+
+/path-to/Software/sratoolkit.3.2.1-alma_linux64/bin/fastq-dump --split-2 /path-
+to/Pipeline/WES/SRR8879056 --gzip -O /path-to/Pipeline/WES/SRR8879056
+```
+
+# Installation of FASTQC tool
+```bash
+https://www.bioinformatics.babraham.ac.uk/projects/download.html#fastqc
+wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.12.1.zip
+unzip fastqc_v0.12.1.zip
+```
+
+# STEP-1: FASTQC command
+
+```bash
+/home/BIB/Software/FastQC_v0.12.1/fastqc SRR14083057_1.fastq.gz SRR14083057_2.fastq.gz
+```
+
+
+# Installation of trimmomatic tool
+
+```bash
+http://www.usadellab.org/cms/?page=trimmomatic
+wget
+
+http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-
+0.39.zip
+
+unzip Trimmomatic-0.39.zip
+```
+
+# STEP-2: Trimmomatic command
+
+```bash
+java -jar /home/BIB/Software/Trimmomatic-0.39/trimmomatic-0.39.jar PE \
+SRR14083057_1.fastq.gz SRR14083057_2.fastq.gz \
+SRR14083057_1_paired.fastq.gz SRR14083057_1_unpaired.fastq.gz \
+SRR14083057_2_paired.fastq.gz SRR14083057_2_unpaired.fastq.gz \
+ILLUMINACLIP:/home/BIB/Software/Trimmomatic-0.39/adapters/TruSeq3-PE.fa:2:30:10 \
+LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+```
+
+# STEP-3: FASTQC command on trimmed paired reads
+
+```bash
+/home/BIB/Software/FastQC_v0.12.1/fastqc SRR14083057_1_paired.fastq.gz  SRR14083057_2_paired.fastq.gz
+```
+
+# Installation of BWA tool
+```bash
+https://github.com/lh3/bwa
+git clone https://github.com/lh3/bwa.git
+cd bwa
+make
+```
+
+# Downloading Human Reference Genome hg38
+```bash
+wget http://hgdownload.soe.ucsc.edu/goldenpath/hg38/bigZips/hg38.fa.gz
+gunzip hg38.fa.gz
+```
+
+# Indexing Human Reference Genome hg38
+```bash
+bwa index -p hg38_index hg38.fa
+```
+
+# STEP-4: BWA command for alignment
+
+```bash
+/home/BIB/Software/bwa/bwa mem -t 4 /home/BIB/Database/HumanGenome_hg38/hg38_index SRR14083057_1_paired.fastq.gz
+SRR14083057_2_paired.fastq.gz -o Sample_aligned.sam
+```
+
+# SAM tools installation
+```bash
+apt install Samtools
+#Command to view first few lines of SAM file
+samtools view Sample_aligned.sam | head
+#Command to view first few lines of SAM file along with header details
+samtools view -h Sample_aligned.sam | head -n 1000
+```
+
+# STEP-5: Command to convert SAM to BAM
+```bash
+samtools view -bS Sample_aligned.sam > Sample_aligned.bam
+-b: Output in BAM format.
+
+-S: Input is in SAM format (optional in newer versions of samtools, as it auto-
+detects).
+```
+
+# STEP-6: Command to convert BAM to sorted BAM
+```bash
+samtools sort Sample_aligned.bam -o Sample_aligned_sorted.bam
+```
+
+# STEP-7: Command to index bam file as .bai file
+```bash
+samtools index Sample_aligned_sorted.bam
+```
+
+# Indexing Human Reference Genome hg38
+```bash
+bwa index -p hg38_index hg38.fa
+```
+
+# Generate .fai index for Human Reference Genome hg38
+```bash
+samtools faidx hg38.fa
+```
+
+# picard installation
+```bash
+wget https://github.com/broadinstitute/picard/releases/download/3.4.0/picard.jar
+```
+
+# Generate .dict file for Human Reference Genome hg38
+```bash
+java -Dpicard.use.qt=false -jar /home/BIB/Software/picard.jar CreateSequenceDictionary
+\
+R=/home/BIB/Software/HumanGenome_hg38/hg38.fa \
+O=/home/BIB/Software//HumanGenome_hg38/hg38.dict
+```
+
+
+# Install GATK
+```bash
+https://github.com/broadinstitute/gatk/releases
+
+https://gatk.broadinstitute.org/hc/en-us/articles/360036194592-Getting-started-with-
+GATK4
+
+wget https://github.com/broadinstitute/gatk/releases/download/4.6.2.0/gatk-4.6.2.0.zip
+unzip gatk-4.6.2.0.zip
+
+echo 'export PATH=$PATH:/path-to/Software/gatk-4.6.2.0' >> ~/.bashrc
+source ~/.bashrc
+```
+
+# STEP-8: Command to AddOrReplaceReadGroups
+#AddOrReplaceReadGroups, which is essential for adding or modifying read group
+information in BAM files — often a requirement before running tools like GATK.
+```bash
+gatk AddOrReplaceReadGroups -I Sample_aligned_sorted.bam -O
+Sample_aligned_sorted_ReadGroups.bam -ID Sample -LB lib1 -PL ILLUMINA -PU unit1 -
+SM Sample
+
+#Command to the added ReadGroups information
+samtools view -H Sample_aligned_sorted_ReadGroups.bam | grep "^@RG"
+```
+
+# STEP-8: Command to MarkDuplicates
+```bash
+gatk MarkDuplicates -I Sample_aligned_sorted_ReadGroups.bam -O
+Sample_aligned_sorted_ReadGroups_dedup.bam -M Sample_dedup.metrics.txt
+```
+
+#Command to view the metrics file
+```bash
+cat Sample_dedup.metrics.txt
+```
+
+# Download known-sites
+```bash
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz.tbi
+
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz
+
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz.tbi
+
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
+
+wget https://storage.googleapis.com/genomics-public-
+data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf
+
+wget https://storage.cloud.google.com/genomics-public-
+data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf.idx
+```
+
+# STEP-8: Command to run BaseRecalibrator
+```bash
+gatk BaseRecalibrator \
+-I Sample_aligned_sorted_ReadGroups_dedup.bam \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+
+--known-sites /home/BIB/Database/GATK_BQSR_KnownSite_hg38/1000G_omni2.5.hg38.vcf.gz \
+
+--known-sites /home/BIB/Database/GATK_BQSR_KnownSite_hg38/hapmap_3.3.hg38.vcf.gz \ --known-sites /home/BIB/Database/GATK_BQSR_KnownSite_hg38/Mills_and_1000G_gold_standard.indels.hg
+
+38.vcf.gz \
+
+--known-sites /home/BIB/Database/GATK_BQSR_KnownSite_hg38/Homo_sapiens_assembly38.dbsnp138.vcf.
+
+gz \
+-O recal_data_new.table
+```
+
+# STEP-9: Command to run ApplyBQSR
+```bash
+gatk ApplyBQSR \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-I Sample_aligned_sorted_ReadGroups_dedup.bam \
+--bqsr-recal-file recal_data_new.table \
+-O Sample_recalibrated.bam
+```
+
+
+# STEP-9: Command to run HaplotypeCaller
+```bash
+gatk HaplotypeCaller \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-I Sample_recalibrated.bam \
+-O Sample_raw_variants.vcf \
+--native-pair-hmm-threads 14
+```
+
+# Command to view first few lines of VCF file
+```bash
+head -n 1000 Sample_raw_variants.vcf
+```
+
+# STEP-10: Variant filtering
+#Separating of SNPs
+```bash
+gatk SelectVariants \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-V Sample_raw_variants.vcf \
+--select-type-to-include SNP \
+-O Sample_raw_snps.vcf
+```
+
+# Separating of INDELs
+```bash
+gatk SelectVariants \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-V Sample_raw_variants.vcf \
+--select-type-to-include INDEL \
+-O Sample_raw_indels.vcf
+```
+
+# Filtering of SNPs
+```bash
+gatk VariantFiltration \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-V Sample_raw_snps.vcf \
+--filter-expression "QD < 2.0" --filter-name "QD2" \
+--filter-expression "FS > 60.0" --filter-name "FS60" \
+--filter-expression "MQ < 40.0" --filter-name "MQ40" \
+--filter-expression "QUAL < 30.0" --filter-name "LowQual" \
+-O Sample_filtered_snps.vcf
+```
+
+# Filtering of INDELs
+```bash
+gatk VariantFiltration \
+-R /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+-V Sample_raw_indels.vcf \
+--filter-expression "QD < 2.0" --filter-name "QD2" \
+--filter-expression "FS > 200.0" --filter-name "FS200" \
+--filter-expression "QUAL < 30.0" --filter-name "LowQual" \
+-O Sample_filtered_indels.vcf
+```
+
+# Merge VCFs
+```bash
+gatk MergeVcfs \
+-I Sample_filtered_snps.vcf \
+-I Sample_filtered_indels.vcf \
+-O Sample_filtered_all.vcf
+```
+
+# Saving only the PASSED variants to a file
+```bash
+/home/BIB/Software/bcftools/bcftools view -f PASS 
+Sample_filtered_all.vcf >
+Sample_PASS.vcf
+```
+
+```bash
+#Download and installation of vep
+https://www.biostars.org/p/9534284/#9535128
+git clone https://github.com/Ensembl/ensembl-vep
+cd ensembl-vep
+perl INSTALL.pl --AUTO acp --ASSEMBLY GRCh38 --PLUGINS all --SPECIES
+homo_sapiens --FASTA /home/BIB/Database/HumanGenome_hg38/hg38.fa
+```
+
+# STEP-11: Command for VEP annotation
+```bash
+/home/BIB/Software/ensembl-vep/vep \
+-i Sample_PASS.vcf \
+-o Sample.vep.vcf \
+--fasta /home/BIB/Database/HumanGenome_hg38/hg38.fa \
+--species homo_sapiens \
+--cache \
+--dir_cache /home/BIB/Database \
+--canonical \
+--vcf \
+--fork 8 \
+--merged \
+--force_overwrite \
+--assembly GRCh38 \
+--biotype \
+--exclude_predicted \
+--everything
+```
+
+# STEP-12: Command for vep filteration
+```bash
+/home/BIB/Software/ensembl-vep/filter_vep \
+--input_file Sample.vep.vcf \
+--output_file Sample.filtered.vep.vcf \
+--filter "CANONICAL is YES" \
+--filter "BIOTYPE is protein_coding" \
+--force_overwrite
+```
+
+# STEP-13: Formatting VEP annotated VCF file
+#Make a header file:
+```bash
+CHROM POS ID REF ALT QUAL FILTER Allele Consequence IMPACT SYMBOL Gene
+Feature_type Feature BIOTYPE EXON INTRON HGVSc HGVSp cDNA_position CDS_position Protein_positionAmino_acids Codons
+Existing_variation DISTANCE STRAND FLAGS VARIANT_CLASSSYMBOL_SOURCE HGNC_ID CANONICAL MANE
+MANE_SELECT MANE_PLUS_CLINICAL TSL APPRIS CCDS ENSP SWISSPROT TREMBL UNIPARC UNIPROT_ISOFORM
+REFSEQ_MATCHSOURCE REFSEQ_OFFSET GIVEN_REF USED_REF BAM_EDIT GENE_PHENO SIFT PolyPhen DOMAINS miRNA
+HGVS_OFFSET AF AFR_AF AMR_AF EAS_AF EUR_AF SAS_AF gnomADe_AF gnomADe_AFR_AF gnomADe_AMR_AF
+gnomADe_ASJ_AF gnomADe_EAS_AF gnomADe_FIN_AF gnomADe_MID_AF gnomADe_NFE_AF
+gnomADe_REMAINING_AF gnomADe_SAS_AF gnomADg_AF gnomADg_AFR_AF gnomADg_AMI_AF gnomADg_AMR_AF
+gnomADg_ASJ_AF gnomADg_EAS_AF gnomADg_FIN_AF gnomADg_MID_AF gnomADg_NFE_AF
+gnomADg_REMAINING_AF gnomADg_SAS_AF MAX_AF MAX_AF_POPS CLIN_SIG SOMATIC PHENO PUBMED MOTIF_NAME
+MOTIF_POS HIGH_INF_POS MOTIF_SCORE_CHANGE TRANSCRIPTION_FACTORS FORMAT Sample
+```
+
+# Formatting column 8:
+```bash
+awk 'BEGIN {FS=OFS="\t"}
+{
+n = split($8, arr, ",");
+for (i = 1; i <= n; i++) {
+sub(/^.*CSQ=/, "", arr[i]);
+print $1, $2, $3, $4, $5, $6, $7, $9, $10, arr[i];
+}
+}' Sample.vep.vcf > Sample.vep.f.vcf
+```
+
+#Replace | with \t:
+```bash
+sed -i 's/|/\t/g' Sample.vep.f.vcf
+```
+
+# Merge both files:
+```bash
+cat header Sample.vep.f.vcf > Sample.vep.f.txt
+sed -i '/^#CHROM/d' Sample.vep.f.txt
+```
